@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+output/
+.playwright-cli/
+.claude/
+.env
+.env.local
+dev-server*.log
+npm-debug.log*
