@@ -738,7 +738,7 @@ function NoteCardShell({
 
   return (
     <article
-      className={`note-card ${density === 'compact' ? 'is-compact' : ''} ${note.pinned ? 'is-pinned' : ''} ${isSorting ? 'is-sorting' : ''} ${isOverlay ? 'is-drag-overlay' : ''}`}
+      className={`note-card ${density === 'compact' ? 'is-compact' : ''} ${note.pinned ? 'is-pinned' : ''} ${isSorting ? 'is-sorting' : ''} ${isOverlay ? 'is-drag-overlay' : ''} ${isMenuOpen ? 'has-open-menu' : ''}`}
       ref={wrapperRef}
       style={style}
     >

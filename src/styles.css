@@ -385,6 +385,12 @@ button:disabled {
   box-shadow: 0 12px 28px rgba(39, 53, 70, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
+.note-card.has-open-menu {
+  z-index: 20;
+  contain: layout;
+  overflow: visible;
+}
+
 .note-card.is-compact {
   height: 86px;
 }
