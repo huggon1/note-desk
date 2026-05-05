@@ -341,14 +341,21 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
   gap: 16px;
+  align-items: start;
+}
+
+.note-grid.is-reordering {
+  user-select: none;
 }
 
 .note-card {
   position: relative;
   display: flex;
   flex-direction: column;
+  contain: layout paint;
   width: 100%;
   height: 228px;
+  overflow: hidden;
   border: 1px solid rgba(101, 116, 138, 0.2);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.64);
@@ -359,7 +366,6 @@ button:disabled {
     border-color 170ms ease,
     box-shadow 170ms ease,
     opacity 170ms ease,
-    transform 170ms ease,
     background-color 170ms ease;
 }
 
@@ -371,27 +377,32 @@ button:disabled {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.58), transparent);
 }
 
-.note-card:hover {
+.note-card:hover,
+.note-card.is-drag-overlay {
   z-index: 2;
   border-color: rgba(63, 111, 127, 0.24);
   background: rgba(255, 255, 255, 0.78);
   box-shadow: 0 12px 28px rgba(39, 53, 70, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  transform: translateY(-2px);
 }
 
 .note-card.is-compact {
   height: 86px;
 }
 
-.note-card.is-dragging {
+.note-card.is-sorting {
   z-index: 3;
-  opacity: 0.5;
-  box-shadow: var(--shadow-md);
-  transform: rotate(1deg) scale(1.015);
+  border-color: rgba(63, 111, 127, 0.42);
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgba(63, 111, 127, 0.08), rgba(255, 255, 255, 0.28));
+  box-shadow:
+    inset 0 0 0 2px rgba(63, 111, 127, 0.12),
+    0 0 0 4px rgba(63, 111, 127, 0.08);
+  opacity: 0.52;
 }
 
-.note-card[draggable="true"] {
-  cursor: grab;
+.note-card.is-sorting > * {
+  opacity: 0.12;
 }
 
 .note-card.is-pinned {
@@ -403,29 +414,33 @@ button:disabled {
   background: linear-gradient(90deg, transparent, rgba(181, 138, 49, 0.42), transparent);
 }
 
-.note-card.is-drop-target {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  transform: translateY(-4px);
+.note-card.is-drag-overlay {
+  width: min(320px, 80vw);
+  cursor: grabbing;
+  opacity: 0.96;
+  box-shadow:
+    0 28px 70px rgba(39, 53, 70, 0.22),
+    0 8px 24px rgba(63, 111, 127, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  transform: rotate(0.8deg) scale(1.025);
 }
 
-.note-card.is-drop-target::after {
-  content: "";
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+.note-grid.is-reordering .note-card:not(.is-sorting) {
+  transition:
+    border-color 170ms ease,
+    box-shadow 170ms ease,
+    opacity 170ms ease,
+    background-color 170ms ease,
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.note-card.is-insert-before::after {
-  left: 8px;
+.note-grid.is-reordering .note-card:hover {
+  box-shadow: 0 4px 14px rgba(39, 53, 70, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-.note-card.is-insert-after::after {
-  right: 8px;
+.note-grid.is-reordering .note-footer {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .note-toolbar {
@@ -447,16 +462,23 @@ button:disabled {
   place-items: center;
   border-radius: 6px;
   color: var(--soft);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   transition:
     background-color 160ms ease,
     color 160ms ease,
     transform 160ms ease;
 }
 
-.note-card[draggable="true"] .drag-handle:hover {
+.drag-handle:hover {
   background: var(--hover-bg);
   color: var(--accent-strong);
   transform: translateY(-1px);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .note-toolbar .note-title {

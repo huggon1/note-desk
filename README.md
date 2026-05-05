@@ -1,6 +1,12 @@
 # Note Desk
 
-Note Desk is a small local-first notes workspace for capturing short development notes, commands, links, and follow-up tasks. It uses a single workspace, stores data in SQLite, and keeps the interface focused on quick entry and lightweight review.
+Note Desk is a small local-first notes workspace for capturing short development notes, commands, links, and follow-up tasks. It uses a single workspace, stores data in SQLite, and keeps the interface focused on fast capture, lightweight review, and smooth card reordering.
+
+## Design Core
+
+- **Capture first**: the page is optimized for quickly entering a thought without navigating away from the board.
+- **Lightweight workspace UI**: the interface keeps a quiet, professional surface with compact controls, readable cards, and restrained motion.
+- **Local-first persistence**: data stays in a local SQLite database by default, with no external service dependency.
 
 ## Features
 
@@ -8,15 +14,27 @@ Note Desk is a small local-first notes workspace for capturing short development
 - Search across note titles and content
 - Full and compact note display modes
 - Pin, archive, restore, edit, copy, and delete actions
-- Drag-and-drop note ordering
+- Magnetic drag-and-drop ordering within pinned and unpinned groups
 - Local SQLite persistence
+
+## Usage
+
+- Add a note from the quick capture form with an optional title and required content.
+- Press `Enter` while the page is focused, and not while typing in a control, to open the large capture editor.
+- Press `Ctrl + Enter` on Windows/Linux or `Cmd + Enter` on macOS inside a note editor to save and close.
+- Double-click a note body, or use the note menu, to open the large editor.
+- Drag a note by its grip handle to reorder it. Pinned notes reorder only within pinned notes; unpinned notes reorder only within unpinned notes.
+- Use search to filter the current board. Sorting is paused while searching or viewing archived notes.
+- Use the density toggle to switch between full cards and compact one-line cards.
+- Delete removes a note immediately without a browser confirmation prompt.
 
 ## Tech Stack
 
-- React
+- React + TypeScript
 - Vite
-- Express
+- Express + TypeScript
 - SQLite via `better-sqlite3`
+- `dnd-kit` for drag interaction
 - Lucide React icons
 
 ## Getting Started
@@ -60,7 +78,7 @@ Note Desk stores data in `data/dev-notes.sqlite` by default. This directory is i
 - `npm run dev` starts the API and Vite client together.
 - `npm run build` builds the frontend.
 - `npm run start` starts the Express server.
-- `npm run check` runs the production build.
+- `npm run check` runs TypeScript checking and the production build.
 
 ## License
 

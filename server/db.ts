@@ -40,12 +40,24 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);
 `);
 
-const noteColumns = db.prepare('PRAGMA table_info(notes)').all().map((column) => column.name);
+type PragmaColumn = {
+  name: string;
+};
+
+type CountRow = {
+  count: number;
+};
+
+type BoardIdRow = {
+  id: number;
+};
+
+const noteColumns = db.prepare('PRAGMA table_info(notes)').all().map((column) => (column as PragmaColumn).name);
 if (!noteColumns.includes('title')) {
   db.prepare("ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT ''").run();
 }
 
-const boardCount = db.prepare('SELECT COUNT(*) as count FROM boards').get().count;
+const boardCount = (db.prepare('SELECT COUNT(*) as count FROM boards').get() as CountRow).count;
 if (boardCount === 0) {
   const insertBoard = db.prepare('INSERT INTO boards (name) VALUES (?)');
   const current = insertBoard.run('Notes');
@@ -57,8 +69,8 @@ if (boardCount === 0) {
   insertNote.run(current.lastInsertRowid, 'Quick capture', 'Drop temporary ideas, steps, URLs, and commands here.', 1, 0);
   insertNote.run(current.lastInsertRowid, '', 'Editing a note updates its position. Pin important notes to keep them at the top.', 0, 1);
 } else if (boardCount > 1) {
-  const primary = db.prepare('SELECT id FROM boards ORDER BY updated_at DESC, id DESC LIMIT 1').get();
-  const collapseBoards = db.transaction((primaryId) => {
+  const primary = db.prepare('SELECT id FROM boards ORDER BY updated_at DESC, id DESC LIMIT 1').get() as BoardIdRow;
+  const collapseBoards = db.transaction((primaryId: number) => {
     db.prepare('UPDATE notes SET board_id = ? WHERE board_id != ?').run(primaryId, primaryId);
     db.prepare('DELETE FROM boards WHERE id != ?').run(primaryId);
     db.prepare('UPDATE boards SET name = ? WHERE id = ?').run('Notes', primaryId);
