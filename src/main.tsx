@@ -243,6 +243,19 @@ function App() {
   }, [modal]);
 
   useEffect(() => {
+    if (!openNoteMenuId) return;
+
+    function closeMenuOnOutsidePointer(event: PointerEvent) {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('.note-menu-wrap')) return;
+      setOpenNoteMenuId(null);
+    }
+
+    window.addEventListener('pointerdown', closeMenuOnOutsidePointer);
+    return () => window.removeEventListener('pointerdown', closeMenuOnOutsidePointer);
+  }, [openNoteMenuId]);
+
+  useEffect(() => {
     function handlePageEnter(event: globalThis.KeyboardEvent) {
       if (
         event.key !== 'Enter' ||
@@ -383,6 +396,9 @@ function App() {
     ? 'Drag notes to reorder within their current group'
     : 'Sorting is paused while searching or viewing archived notes';
   const activeDragNote = activeDragId ? visibleNotes.find((note) => note.id === activeDragId) : null;
+  const activeDragDensity = activeDragNote?.pinned ? 'pinned' : noteDensity;
+  const showPinnedSidebar = !isLoading && pinnedCount > 0;
+  const modalNote = modal?.mode === 'note' ? notes.find((note) => note.id === modal.noteId) : null;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -503,110 +519,135 @@ function App() {
           </div>
         )}
 
-        <form className="quick-capture" onSubmit={createNote}>
-          <div className="capture-title-row">
-            <input
-              className="capture-title"
-              value={capture.title}
-              disabled={!activeBoardId}
-              onChange={(event) => setCapture((value) => ({ ...value, title: event.target.value }))}
-              placeholder="Title"
-            />
-            <div className="capture-actions">
-              <button type="button" className="ghost-button" onClick={openCaptureModal} title="Open large editor">
-                <Maximize2 size={18} />
-              </button>
-              <button type="submit" disabled={!capture.content.trim() || !activeBoardId}>
-                <Plus size={18} />
-                <span>Add note</span>
-              </button>
-            </div>
-          </div>
-          <textarea
-            className="capture-content"
-            value={capture.content}
-            disabled={!activeBoardId}
-            onChange={(event) => setCapture((value) => ({ ...value, content: event.target.value }))}
-            placeholder="Note content"
-            rows={1}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-        </form>
-
-        <div className="board-meta">
-          <span className="meta-pill meta-pill-strong">{notes.length} notes</span>
-          <span className="meta-pill">{pinnedCount} pinned</span>
-          <span className="meta-pill meta-pill-wide">{dragHint}</span>
-        </div>
-
-        {isLoading ? (
-          <div className="empty-state">Loading local boards...</div>
-        ) : notes.length === 0 ? (
-          <div className="empty-state">
-            <strong>No notes yet</strong>
-            <span>Add a quick note above to start this board.</span>
-          </div>
-        ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragMove={handleDragMove}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <div className={`note-grid ${activeDragId ? 'is-reordering' : ''}`}>
-              <SortableContext items={pinnedNotes.map((note) => note.id)} strategy={rectSortingStrategy}>
-                {pinnedNotes.map((note) => (
-                  <SortableNoteCard
-                    key={note.id}
-                    canDragSort={canDragSort}
-                    copyNote={copyNote}
-                    deleteNote={deleteNote}
-                    density={noteDensity}
-                    isMenuOpen={openNoteMenuId === note.id}
-                    note={note}
-                    onMenuToggle={() => setOpenNoteMenuId((value) => (value === note.id ? null : note.id))}
-                    openNoteModal={openNoteModal}
-                    patchNote={patchNote}
-                    registerNoteElement={registerNoteElement}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className={`board-layout ${showPinnedSidebar ? 'has-pinned-sidebar' : ''}`}>
+            <div className="board-main">
+              <form className="quick-capture" onSubmit={createNote}>
+                <div className="capture-title-row">
+                  <input
+                    className="capture-title"
+                    value={capture.title}
+                    disabled={!activeBoardId}
+                    onChange={(event) => setCapture((value) => ({ ...value, title: event.target.value }))}
+                    placeholder="Title"
                   />
-                ))}
-              </SortableContext>
-              <SortableContext items={unpinnedNotes.map((note) => note.id)} strategy={rectSortingStrategy}>
-                {unpinnedNotes.map((note) => (
-                  <SortableNoteCard
-                    key={note.id}
-                    canDragSort={canDragSort}
-                    copyNote={copyNote}
-                    deleteNote={deleteNote}
-                    density={noteDensity}
-                    isMenuOpen={openNoteMenuId === note.id}
-                    note={note}
-                    onMenuToggle={() => setOpenNoteMenuId((value) => (value === note.id ? null : note.id))}
-                    openNoteModal={openNoteModal}
-                    patchNote={patchNote}
-                    registerNoteElement={registerNoteElement}
-                  />
-                ))}
-              </SortableContext>
-            </div>
-            <DragOverlay dropAnimation={null}>
-              {activeDragNote ? (
-                <NoteCardShell
-                  canDragSort={canDragSort}
-                  density={noteDensity}
-                  isOverlay
-                  note={activeDragNote}
+                  <div className="capture-actions">
+                    <button type="button" className="ghost-button" onClick={openCaptureModal} title="Open large editor">
+                      <Maximize2 size={18} />
+                    </button>
+                    <button type="submit" disabled={!capture.content.trim() || !activeBoardId}>
+                      <Plus size={18} />
+                      <span>Add note</span>
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="capture-content"
+                  value={capture.content}
+                  disabled={!activeBoardId}
+                  onChange={(event) => setCapture((value) => ({ ...value, content: event.target.value }))}
+                  placeholder="Note content"
+                  rows={1}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
                 />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        )}
+              </form>
+
+              <div className="board-meta">
+                <span className="meta-pill meta-pill-strong">{notes.length} notes</span>
+                <span className="meta-pill">{pinnedCount} pinned</span>
+                <span className="meta-pill meta-pill-wide">{dragHint}</span>
+              </div>
+
+              {isLoading ? (
+                <div className="empty-state">Loading local boards...</div>
+              ) : notes.length === 0 ? (
+                <div className="empty-state">
+                  <strong>No notes yet</strong>
+                  <span>Add a quick note above to start this board.</span>
+                </div>
+              ) : (
+                <div className={`note-grid ${activeDragId ? 'is-reordering' : ''}`}>
+                  {unpinnedNotes.length === 0 ? (
+                    <div className="empty-state note-grid-empty">
+                      <strong>All notes are pinned</strong>
+                      <span>Unpin a note to return it to the main board.</span>
+                    </div>
+                  ) : (
+                    <SortableContext items={unpinnedNotes.map((note) => note.id)} strategy={rectSortingStrategy}>
+                      {unpinnedNotes.map((note) => (
+                        <SortableNoteCard
+                          key={note.id}
+                          canDragSort={canDragSort}
+                          copyNote={copyNote}
+                          deleteNote={deleteNote}
+                          density={noteDensity}
+                          isMenuOpen={openNoteMenuId === note.id}
+                          note={note}
+                          onMenuToggle={() => setOpenNoteMenuId((value) => (value === note.id ? null : note.id))}
+                          openNoteModal={openNoteModal}
+                          patchNote={patchNote}
+                          registerNoteElement={registerNoteElement}
+                        />
+                      ))}
+                    </SortableContext>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {showPinnedSidebar ? (
+              <aside className="pinned-sidebar" aria-label="Pinned notes">
+                <header className="pinned-sidebar-header">
+                  <div>
+                    <p className="eyebrow">Pinned</p>
+                    <h3>Reference notes</h3>
+                  </div>
+                  <span>{pinnedCount}</span>
+                </header>
+                <div className={`pinned-note-list ${activeDragId ? 'is-reordering' : ''}`}>
+                  <SortableContext items={pinnedNotes.map((note) => note.id)} strategy={rectSortingStrategy}>
+                    {pinnedNotes.map((note) => (
+                      <SortableNoteCard
+                        key={note.id}
+                        canDragSort={canDragSort}
+                        copyNote={copyNote}
+                        deleteNote={deleteNote}
+                        density="pinned"
+                        isMenuOpen={openNoteMenuId === note.id}
+                        note={note}
+                        onMenuToggle={() => setOpenNoteMenuId((value) => (value === note.id ? null : note.id))}
+                        openNoteModal={openNoteModal}
+                        patchNote={patchNote}
+                        registerNoteElement={registerNoteElement}
+                      />
+                    ))}
+                  </SortableContext>
+                </div>
+              </aside>
+            ) : null}
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeDragNote ? (
+              <NoteCardShell
+                canDragSort={canDragSort}
+                density={activeDragDensity}
+                isOverlay
+                note={activeDragNote}
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </section>
 
       {modal ? (
@@ -616,6 +657,11 @@ function App() {
               <div>
                 <p className="eyebrow">{modal.mode === 'capture' ? 'New note' : 'View and edit'}</p>
                 <h2>{modal.mode === 'capture' ? 'Expanded capture' : 'Note details'}</h2>
+                {modalNote ? (
+                  <span className="modal-updated-at">
+                    Updated {new Date(modalNote.updatedAt).toLocaleString()}
+                  </span>
+                ) : null}
               </div>
               <button title="Close" onClick={() => setModal(null)}>
                 <X size={20} />
@@ -663,7 +709,7 @@ type NoteCardProps = {
   canDragSort: boolean;
   copyNote?: (content: string) => void;
   deleteNote?: (noteId: number) => void;
-  density: 'full' | 'compact';
+  density: 'full' | 'compact' | 'pinned';
   isMenuOpen?: boolean;
   isOverlay?: boolean;
   note: Note;
@@ -734,11 +780,12 @@ function NoteCardShell({
   style,
   wrapperRef
 }: NoteCardShellProps) {
-  const title = note.title || note.content.split('\n')[0] || 'Untitled';
+  const hasTitle = Boolean(note.title.trim());
+  const title = hasTitle ? note.title : '';
 
   return (
     <article
-      className={`note-card ${density === 'compact' ? 'is-compact' : ''} ${note.pinned ? 'is-pinned' : ''} ${isSorting ? 'is-sorting' : ''} ${isOverlay ? 'is-drag-overlay' : ''}`}
+      className={`note-card ${density === 'compact' ? 'is-compact' : ''} ${density === 'pinned' ? 'is-sidebar-card' : ''} ${note.pinned ? 'is-pinned' : ''} ${isSorting ? 'is-sorting' : ''} ${isOverlay ? 'is-drag-overlay' : ''} ${isMenuOpen ? 'has-open-menu' : ''}`}
       ref={wrapperRef}
       style={style}
     >
@@ -752,7 +799,7 @@ function NoteCardShell({
         >
           <GripVertical size={16} />
         </span>
-        <h3 className="note-title">{title}</h3>
+        <h3 className={`note-title ${hasTitle ? '' : 'is-untitled'}`}>{title}</h3>
         {copyNote ? (
           <button title="Copy" onClick={() => copyNote(note.content)}>
             <Clipboard size={16} />
@@ -790,10 +837,6 @@ function NoteCardShell({
       <div className="note-body" onDoubleClick={() => openNoteModal?.(note)}>
         <p className="note-content">{note.content}</p>
       </div>
-      <footer className="note-footer">
-        {note.pinned ? <span className="note-chip">Pinned</span> : <span />}
-        <span>{new Date(note.updatedAt).toLocaleString()}</span>
-      </footer>
     </article>
   );
 }

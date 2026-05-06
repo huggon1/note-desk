@@ -200,10 +200,12 @@ app.patch('/api/notes/:id', (req: Request, res: Response, next: NextFunction) =>
     const sortOrder = req.body.sortOrder === undefined ? note.sort_order : Number(req.body.sortOrder);
     const updatedAt = nowSql();
     const contentChanged = title !== note.title || content !== note.content;
+    const shouldReturnToUnpinnedStart = note.pinned === 1 && pinned === 0 && archived === 0;
     const shouldPromote = contentChanged && pinned === 0 && archived === 0;
+    const shouldPlaceAtStart = shouldReturnToUnpinnedStart || shouldPromote;
 
     const updateNote = db.transaction(() => {
-      if (shouldPromote) {
+      if (shouldPlaceAtStart) {
         db.prepare(`
           UPDATE notes
           SET sort_order = COALESCE(sort_order, 0) + 1
@@ -220,7 +222,7 @@ app.patch('/api/notes/:id', (req: Request, res: Response, next: NextFunction) =>
         content,
         pinned,
         archived,
-        shouldPromote ? 0 : (Number.isFinite(sortOrder) ? sortOrder : note.sort_order),
+        shouldPlaceAtStart ? 0 : (Number.isFinite(sortOrder) ? sortOrder : note.sort_order),
         updatedAt,
         id
       );
