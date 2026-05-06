@@ -1,5 +1,7 @@
 # Note Desk
 
+![alt text](image.png)
+
 Note Desk is a small local-first notes workspace for capturing short development notes, commands, links, and follow-up tasks. It uses a single workspace, stores data in SQLite, and keeps the interface focused on fast capture, lightweight review, and smooth card reordering.
 
 ## Design Core
@@ -12,8 +14,9 @@ Note Desk is a small local-first notes workspace for capturing short development
 
 - Quick note capture with optional titles
 - Search across note titles and content
-- Full and compact note display modes
-- Pin, archive, restore, edit, copy, and delete actions
+- Full and compact display modes for unpinned notes
+- Pin notes to a dedicated reference sidebar
+- Archive, restore, edit, copy, and delete actions
 - Magnetic drag-and-drop ordering within pinned and unpinned groups
 - Local SQLite persistence
 
@@ -23,9 +26,9 @@ Note Desk is a small local-first notes workspace for capturing short development
 - Press `Enter` while the page is focused, and not while typing in a control, to open the large capture editor.
 - Press `Ctrl + Enter` on Windows/Linux or `Cmd + Enter` on macOS inside a note editor to save and close.
 - Double-click a note body, or use the note menu, to open the large editor.
-- Drag a note by its grip handle to reorder it. Pinned notes reorder only within pinned notes; unpinned notes reorder only within unpinned notes.
+- Drag a note by its grip handle to reorder it. Pinned notes reorder only within the right reference sidebar; unpinned notes reorder only within the main board.
 - Use search to filter the current board. Sorting is paused while searching or viewing archived notes.
-- Use the density toggle to switch between full cards and compact one-line cards.
+- Use the density toggle to switch unpinned notes between full cards and compact one-line cards. Pinned sidebar notes keep their own stable layout.
 - Delete removes a note immediately without a browser confirmation prompt.
 
 ## Tech Stack
