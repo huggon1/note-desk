@@ -2,7 +2,7 @@
 
 ![alt text](image.png)
 
-Note Desk is a small local-first notes workspace for capturing short development notes, commands, links, and follow-up tasks. It uses a single workspace, stores data in SQLite, and keeps the interface focused on fast capture, lightweight review, and smooth card reordering.
+Note Desk is a small local-first notes workspace for capturing short development notes, commands, links, and follow-up tasks. It runs as a React/Vite frontend with a local Express API, stores notes in SQLite, and keeps the interface focused on fast capture, lightweight review, and smooth card reordering.
 
 ## Design Core
 
@@ -12,7 +12,7 @@ Note Desk is a small local-first notes workspace for capturing short development
 
 ## Features
 
-- Quick note capture with optional titles
+- Focused large-editor note capture with optional titles
 - Search across note titles and content
 - Full and compact display modes for unpinned notes
 - Pin notes to a dedicated reference sidebar
@@ -20,16 +20,84 @@ Note Desk is a small local-first notes workspace for capturing short development
 - Magnetic drag-and-drop ordering within pinned and unpinned groups
 - Local SQLite persistence
 
+## Requirements
+
+- Node.js 20 or newer
+- npm
+
+The app uses `better-sqlite3`, which may require native build tooling if a prebuilt package is not available for your Node.js version or platform.
+
+## Installation
+
+Clone the repository, then install dependencies from the project root:
+
+```bash
+npm install
+```
+
+No external database or hosted service is required. The first server start creates a local SQLite database automatically.
+
+## Running Locally
+
+Start the API server and Vite development server together:
+
+```bash
+npm run dev
+```
+
+This launches:
+
+- Express API: `http://127.0.0.1:4000`
+- Vite client: the local URL printed by Vite, usually `http://127.0.0.1:5173`
+
+Open the Vite client URL in your browser. The client talks to the local API during development.
+
+To run the frontend and backend separately:
+
+```bash
+npm run dev:server
+npm run dev:client
+```
+
 ## Usage
 
-- Add a note from the quick capture form with an optional title and required content.
-- Press `Enter` while the page is focused, and not while typing in a control, to open the large capture editor.
+- Click **New note**, or press `Enter` while the page is focused and not while typing in a control, to open the large capture editor.
 - Press `Ctrl + Enter` on Windows/Linux or `Cmd + Enter` on macOS inside a note editor to save and close.
+- Closing the large editor saves non-empty changes automatically. Use **Discard** to abandon the current draft or edit.
 - Double-click a note body, or use the note menu, to open the large editor.
 - Drag a note by its grip handle to reorder it. Pinned notes reorder only within the right reference sidebar; unpinned notes reorder only within the main board.
 - Use search to filter the current board. Sorting is paused while searching or viewing archived notes.
 - Use the density toggle to switch unpinned notes between full cards and compact one-line cards. Pinned sidebar notes keep their own stable layout.
 - Delete removes a note immediately without a browser confirmation prompt.
+
+## Configuration
+
+The server reads these environment variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `4000` | Port used by the Express API and production server. |
+| `NOTES_DB_PATH` | `data/dev-notes.sqlite` | SQLite database file path. Parent directories are created automatically. |
+
+Examples:
+
+```bash
+# macOS/Linux
+PORT=4100 NOTES_DB_PATH=./data/local.sqlite npm start
+```
+
+```powershell
+# Windows PowerShell
+$env:PORT="4100"
+$env:NOTES_DB_PATH="D:\note-desk\data\local.sqlite"
+npm start
+```
+
+## Data Storage
+
+By default, Note Desk stores data in `data/dev-notes.sqlite` and enables SQLite WAL mode, which also creates `*.sqlite-wal` and `*.sqlite-shm` files next to the database. The `data/` directory is ignored by Git.
+
+To back up your notes, stop the server and copy the SQLite database files from the configured data directory.
 
 ## Tech Stack
 
@@ -40,25 +108,9 @@ Note Desk is a small local-first notes workspace for capturing short development
 - `dnd-kit` for drag interaction
 - Lucide React icons
 
-## Getting Started
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Start the development server:
-
-```bash
-npm run dev
-```
-
-The client runs through Vite and the API runs on `http://127.0.0.1:4000`.
-
 ## Production Build
 
-Build the client:
+Build the frontend:
 
 ```bash
 npm run build
@@ -70,18 +122,32 @@ Start the Express server:
 npm start
 ```
 
-When `dist/` exists, the Express server serves the built client and API from the same process.
+When `dist/` exists, Express serves both the built client and the API from the same process at `http://127.0.0.1:4000` unless `PORT` is set.
 
-## Data
+You can also preview the built frontend with Vite:
 
-Note Desk stores data in `data/dev-notes.sqlite` by default. This directory is ignored by Git. To use a different database path, set `NOTES_DB_PATH`.
+```bash
+npm run preview
+```
 
 ## Scripts
 
 - `npm run dev` starts the API and Vite client together.
+- `npm run dev:server` starts the Express API in watch mode.
+- `npm run dev:client` starts the Vite development server.
 - `npm run build` builds the frontend.
-- `npm run start` starts the Express server.
+- `npm start` starts the Express server.
+- `npm run preview` serves the production frontend bundle with Vite.
 - `npm run check` runs TypeScript checking and the production build.
+
+## Project Structure
+
+```text
+server/        Express API and SQLite setup
+src/           React application
+data/          Local SQLite database files, ignored by Git
+dist/          Production frontend build, generated by npm run build
+```
 
 ## License
 

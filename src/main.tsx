@@ -76,7 +76,9 @@ type CaptureDraft = {
 
 type EditorModalState =
   | ({ mode: 'capture' } & CaptureDraft)
-  | ({ mode: 'note'; noteId: number } & CaptureDraft);
+  | ({ mode: 'note'; noteId: number; originalTitle: string; originalContent: string } & CaptureDraft);
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
 type NotePatch = Partial<Pick<Note, 'title' | 'content' | 'pinned' | 'archived' | 'sortOrder'>>;
 
@@ -95,8 +97,6 @@ type DragSession = {
   originNotes: Note[];
   slots: DragSlot[];
 };
-
-const emptyCapture: CaptureDraft = { title: '', content: '' };
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -185,10 +185,10 @@ function reorderWithinPinnedGroup(notes: Note[], activeId: number, targetIndex: 
 function App() {
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [capture, setCapture] = useState<CaptureDraft>(emptyCapture);
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [modal, setModal] = useState<EditorModalState | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [activeDragId, setActiveDragId] = useState<number | null>(null);
   const [dragOriginNotes, setDragOriginNotes] = useState<Note[] | null>(null);
   const [noteDensity, setNoteDensity] = useState<'full' | 'compact'>('full');
@@ -198,6 +198,7 @@ function App() {
   const modalContentRef = useRef<HTMLTextAreaElement | null>(null);
   const noteElementsRef = useRef(new Map<number, HTMLElement>());
   const dragSessionRef = useRef<DragSession | null>(null);
+  const isModalSavingRef = useRef(false);
 
   async function ensureBoard() {
     const boards = await api<Board[]>('/boards');
@@ -275,7 +276,7 @@ function App() {
 
     window.addEventListener('keydown', handlePageEnter);
     return () => window.removeEventListener('keydown', handlePageEnter);
-  }, [modal, capture]);
+  }, [modal]);
 
   async function createNoteFromDraft(source: CaptureDraft): Promise<boolean> {
     const content = source.content.trim();
@@ -287,18 +288,12 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ title, content })
       });
-      setCapture(emptyCapture);
       await loadNotes();
       return true;
     } catch (err) {
       setError((err as Error).message);
       return false;
     }
-  }
-
-  async function createNote(event: FormEvent<HTMLFormElement>, source = capture) {
-    event.preventDefault();
-    await createNoteFromDraft(source);
   }
 
   async function patchNote(noteId: number, patch: NotePatch): Promise<boolean> {
@@ -325,27 +320,61 @@ function App() {
     }
   }
 
-  async function saveModalNote(): Promise<boolean> {
-    if (!modal || modal.mode !== 'note') return false;
-    const title = modal.title.trim();
-    const content = modal.content.trim();
+  async function saveModalNote(source: Extract<EditorModalState, { mode: 'note' }>): Promise<boolean> {
+    const title = source.title.trim();
+    const content = source.content.trim();
     if (!content) return false;
-    return patchNote(modal.noteId, { title, content });
+    if (title === source.originalTitle && content === source.originalContent) return true;
+    return patchNote(source.noteId, { title, content });
+  }
+
+  async function persistModalAndClose() {
+    if (!modal || isModalSavingRef.current) return;
+    const currentModal = modal;
+    const content = currentModal.content.trim();
+
+    if (!content) {
+      if (currentModal.mode === 'capture') {
+        setModal(null);
+        setSaveStatus('idle');
+        return;
+      }
+
+      setSaveStatus('failed');
+      setError('Note content is required to save.');
+      return;
+    }
+
+    setSaveStatus('saving');
+    isModalSavingRef.current = true;
+    const saved =
+      currentModal.mode === 'capture' ? await createNoteFromDraft(currentModal) : await saveModalNote(currentModal);
+    isModalSavingRef.current = false;
+
+    if (saved) {
+      setSaveStatus('saved');
+      setModal(null);
+      return;
+    }
+
+    setSaveStatus('failed');
   }
 
   async function submitModal(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (!modal) return;
-
-    const saved =
-      modal.mode === 'capture' ? await createNoteFromDraft(modal) : await saveModalNote();
-    if (saved) setModal(null);
+    await persistModalAndClose();
   }
 
   function handleModalKeyDown(event: ReactKeyboardEvent<HTMLFormElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
       event.preventDefault();
       event.currentTarget.requestSubmit();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      void persistModalAndClose();
     }
   }
 
@@ -371,12 +400,26 @@ function App() {
   }
 
   function openCaptureModal() {
-    setModal({ mode: 'capture', title: capture.title, content: capture.content });
+    setSaveStatus('idle');
+    setModal({ mode: 'capture', title: '', content: '' });
   }
 
   function openNoteModal(note: Note) {
     setOpenNoteMenuId(null);
-    setModal({ mode: 'note', noteId: note.id, title: note.title || '', content: note.content });
+    setSaveStatus('idle');
+    setModal({
+      mode: 'note',
+      noteId: note.id,
+      title: note.title || '',
+      content: note.content,
+      originalTitle: note.title || '',
+      originalContent: note.content
+    });
+  }
+
+  function discardModal() {
+    setSaveStatus('idle');
+    setModal(null);
   }
 
   function registerNoteElement(noteId: number, element: HTMLElement | null) {
@@ -392,9 +435,6 @@ function App() {
   const unpinnedNotes = useMemo(() => notes.filter((note) => !note.pinned), [notes]);
   const pinnedCount = pinnedNotes.length;
   const canDragSort = !showArchived && !search;
-  const dragHint = canDragSort
-    ? 'Drag notes to reorder within their current group'
-    : 'Sorting is paused while searching or viewing archived notes';
   const activeDragNote = activeDragId ? visibleNotes.find((note) => note.id === activeDragId) : null;
   const activeDragDensity = activeDragNote?.pinned ? 'pinned' : noteDensity;
   const showPinnedSidebar = !isLoading && pinnedCount > 0;
@@ -477,6 +517,10 @@ function App() {
           <div>
             <p className="eyebrow">Workspace</p>
             <h2>Note Desk</h2>
+            <div className="topbar-meta">
+              <span className="meta-pill meta-pill-strong">{notes.length} notes</span>
+              <span className="meta-pill">{pinnedCount} pinned</span>
+            </div>
           </div>
           <div className="topbar-tools">
             <label className="search-box">
@@ -492,6 +536,15 @@ function App() {
                 </button>
               )}
             </label>
+            <button
+              type="button"
+              className="new-note-button"
+              onClick={openCaptureModal}
+              disabled={!activeBoardId}
+            >
+              <Plus size={18} />
+              <span>New note</span>
+            </button>
             <button
               className={`density-toggle ${noteDensity === 'compact' ? 'is-on' : ''}`}
               onClick={() => setNoteDensity((value) => (value === 'compact' ? 'full' : 'compact'))}
@@ -529,52 +582,12 @@ function App() {
         >
           <div className={`board-layout ${showPinnedSidebar ? 'has-pinned-sidebar' : ''}`}>
             <div className="board-main">
-              <form className="quick-capture" onSubmit={createNote}>
-                <div className="capture-title-row">
-                  <input
-                    className="capture-title"
-                    value={capture.title}
-                    disabled={!activeBoardId}
-                    onChange={(event) => setCapture((value) => ({ ...value, title: event.target.value }))}
-                    placeholder="Title"
-                  />
-                  <div className="capture-actions">
-                    <button type="button" className="ghost-button" onClick={openCaptureModal} title="Open large editor">
-                      <Maximize2 size={18} />
-                    </button>
-                    <button type="submit" disabled={!capture.content.trim() || !activeBoardId}>
-                      <Plus size={18} />
-                      <span>Add note</span>
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  className="capture-content"
-                  value={capture.content}
-                  disabled={!activeBoardId}
-                  onChange={(event) => setCapture((value) => ({ ...value, content: event.target.value }))}
-                  placeholder="Note content"
-                  rows={1}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                      event.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                />
-              </form>
-
-              <div className="board-meta">
-                <span className="meta-pill meta-pill-strong">{notes.length} notes</span>
-                <span className="meta-pill">{pinnedCount} pinned</span>
-                <span className="meta-pill meta-pill-wide">{dragHint}</span>
-              </div>
-
               {isLoading ? (
                 <div className="empty-state">Loading local boards...</div>
               ) : notes.length === 0 ? (
                 <div className="empty-state">
                   <strong>No notes yet</strong>
-                  <span>Add a quick note above to start this board.</span>
+                  <span>Use New note or press Enter to start this board.</span>
                 </div>
               ) : (
                 <div className={`note-grid ${activeDragId ? 'is-reordering' : ''}`}>
@@ -651,7 +664,13 @@ function App() {
       </section>
 
       {modal ? (
-        <div className="modal-backdrop" role="presentation">
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) void persistModalAndClose();
+          }}
+        >
           <section className="note-modal" role="dialog" aria-modal="true" aria-label="Large note editor">
             <header className="modal-header">
               <div>
@@ -663,7 +682,7 @@ function App() {
                   </span>
                 ) : null}
               </div>
-              <button title="Close" onClick={() => setModal(null)}>
+              <button title="Save and close" onClick={() => void persistModalAndClose()}>
                 <X size={20} />
               </button>
             </header>
@@ -671,29 +690,44 @@ function App() {
             <form className="modal-form" onSubmit={submitModal} onKeyDown={handleModalKeyDown}>
               <input
                 value={modal.title}
-                onChange={(event) => setModal((value) => (value ? { ...value, title: event.target.value } : value))}
+                onChange={(event) => {
+                  setSaveStatus('idle');
+                  setModal((value) => (value ? { ...value, title: event.target.value } : value));
+                }}
                 placeholder="Title, optional"
               />
               <textarea
                 ref={modalContentRef}
                 value={modal.content}
-                onChange={(event) => setModal((value) => (value ? { ...value, content: event.target.value } : value))}
+                onChange={(event) => {
+                  setSaveStatus('idle');
+                  setModal((value) => (value ? { ...value, content: event.target.value } : value));
+                }}
                 placeholder="Note content"
               />
               <footer className="modal-actions">
-                {modal.mode === 'note' ? (
-                  <button type="button" className="danger-button" onClick={() => deleteNote(modal.noteId)}>
-                    Delete
+                <div className="modal-left-actions">
+                  <button type="button" onClick={discardModal}>
+                    Discard
                   </button>
-                ) : (
-                  <span />
-                )}
-                <div>
-                  <button type="button" onClick={() => setModal(null)}>
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={!modal.content.trim()}>
-                    {modal.mode === 'capture' ? 'Add note' : 'Save changes'}
+                  {modal.mode === 'note' ? (
+                    <button type="button" className="danger-button" onClick={() => deleteNote(modal.noteId)}>
+                      Delete
+                    </button>
+                  ) : null}
+                </div>
+                <span className={`save-status save-status-${saveStatus}`} aria-live="polite">
+                  {saveStatus === 'saving'
+                    ? 'Saving'
+                    : saveStatus === 'saved'
+                      ? 'Saved'
+                      : saveStatus === 'failed'
+                        ? 'Save failed'
+                        : ''}
+                </span>
+                <div className="modal-right-actions">
+                  <button type="submit" disabled={saveStatus === 'saving' || (modal.mode === 'note' && !modal.content.trim())}>
+                    Done
                   </button>
                 </div>
               </footer>
