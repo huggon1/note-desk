@@ -196,6 +196,7 @@ function App() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const modalContentRef = useRef<HTMLTextAreaElement | null>(null);
+  const modalFocusKeyRef = useRef<string | null>(null);
   const noteElementsRef = useRef(new Map<number, HTMLElement>());
   const dragSessionRef = useRef<DragSession | null>(null);
   const isModalSavingRef = useRef(false);
@@ -239,7 +240,14 @@ function App() {
   }, [activeBoardId, showArchived, search]);
 
   useEffect(() => {
-    if (!modal) return;
+    if (!modal) {
+      modalFocusKeyRef.current = null;
+      return;
+    }
+
+    const focusKey = modal.mode === 'note' ? `note-${modal.noteId}` : 'capture';
+    if (modalFocusKeyRef.current === focusKey) return;
+    modalFocusKeyRef.current = focusKey;
     requestAnimationFrame(() => modalContentRef.current?.focus());
   }, [modal]);
 
