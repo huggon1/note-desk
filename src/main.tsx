@@ -30,6 +30,7 @@ import {
   Plus,
   Rows3,
   Search,
+  Settings as SettingsIcon,
   Trash2,
   X
 } from 'lucide-react';
@@ -43,44 +44,28 @@ import {
   useState
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createNoteStore } from './app/note-store';
+import {
+  applySettings,
+  DEFAULT_SETTINGS,
+  displayShortcut,
+  loadSettings,
+  saveSettings,
+  shortcutFromKeyboardEvent,
+  type AppSettings
+} from './app/settings';
+import type { CaptureDraft, Note, NotePatch, NoteStore } from './app/types';
+import { configureWindowToggleShortcut, testWindowToggleShortcut } from './desktop/shortcuts';
+import { isDesktopRuntime } from './desktop/window-controls';
 import './styles.css';
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  (window.location.port === '4000' ? '/api' : 'http://127.0.0.1:4000/api');
-
-type Board = {
-  id: number;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-  activeCount?: number;
-};
-
-type Note = {
-  id: number;
-  boardId: number;
-  title: string;
-  content: string;
-  pinned: boolean;
-  archived: boolean;
-  sortOrder: number | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type CaptureDraft = {
-  title: string;
-  content: string;
-};
+const noteStore: NoteStore = createNoteStore();
 
 type EditorModalState =
   | ({ mode: 'capture' } & CaptureDraft)
   | ({ mode: 'note'; noteId: number; originalTitle: string; originalContent: string } & CaptureDraft);
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
-
-type NotePatch = Partial<Pick<Note, 'title' | 'content' | 'pinned' | 'archived' | 'sortOrder'>>;
 
 type DragSlot = {
   noteId: number;
@@ -97,21 +82,6 @@ type DragSession = {
   originNotes: Note[];
   slots: DragSlot[];
 };
-
-async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({} as { error?: string }));
-    throw new Error(payload.error || `Request failed: ${response.status}`);
-  }
-
-  if (response.status === 204) return null as T;
-  return response.json() as Promise<T>;
-}
 
 function isTextEntryElement(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -193,6 +163,11 @@ function App() {
   const [dragOriginNotes, setDragOriginNotes] = useState<Note[] | null>(null);
   const [noteDensity, setNoteDensity] = useState<'full' | 'compact'>('full');
   const [openNoteMenuId, setOpenNoteMenuId] = useState<number | null>(null);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const modalContentRef = useRef<HTMLTextAreaElement | null>(null);
@@ -200,18 +175,10 @@ function App() {
   const noteElementsRef = useRef(new Map<number, HTMLElement>());
   const dragSessionRef = useRef<DragSession | null>(null);
   const isModalSavingRef = useRef(false);
+  const desktopHideRequestRef = useRef<() => Promise<boolean>>(async () => true);
 
   async function ensureBoard() {
-    const boards = await api<Board[]>('/boards');
-    if (boards.length > 0) {
-      setActiveBoardId(boards[0].id);
-      return;
-    }
-
-    const board = await api<Board>('/boards', {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Notes' })
-    });
+    const board = await noteStore.ensureBoard();
     setActiveBoardId(board.id);
   }
 
@@ -221,11 +188,11 @@ function App() {
       return;
     }
 
-    const params = new URLSearchParams({
-      archived: String(showArchived),
+    const nextNotes = await noteStore.loadNotes({
+      boardId: activeBoardId,
+      archived: showArchived,
       search
     });
-    const nextNotes = await api<Note[]>(`/boards/${activeBoardId}/notes?${params.toString()}`);
     setNotes(nextNotes);
   }
 
@@ -233,6 +200,16 @@ function App() {
     ensureBoard()
       .catch((err: Error) => setError(err.message))
       .finally(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadSettings()
+      .then((nextSettings) => {
+        setSettings(nextSettings);
+        setSettingsDraft(nextSettings);
+        applySettings(nextSettings);
+      })
+      .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(() => {
@@ -292,10 +269,7 @@ function App() {
     if (!content || !activeBoardId) return false;
 
     try {
-      await api<Note>(`/boards/${activeBoardId}/notes`, {
-        method: 'POST',
-        body: JSON.stringify({ title, content })
-      });
+      await noteStore.createNote(activeBoardId, { title, content });
       await loadNotes();
       return true;
     } catch (err) {
@@ -306,10 +280,7 @@ function App() {
 
   async function patchNote(noteId: number, patch: NotePatch): Promise<boolean> {
     try {
-      await api<Note>(`/notes/${noteId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch)
-      });
+      await noteStore.patchNote(noteId, patch);
       await loadNotes();
       return true;
     } catch (err) {
@@ -320,7 +291,7 @@ function App() {
 
   async function deleteNote(noteId: number) {
     try {
-      await api<null>(`/notes/${noteId}`, { method: 'DELETE' });
+      await noteStore.deleteNote(noteId);
       setModal(null);
       await loadNotes();
     } catch (err) {
@@ -336,8 +307,8 @@ function App() {
     return patchNote(source.noteId, { title, content });
   }
 
-  async function persistModalAndClose() {
-    if (!modal || isModalSavingRef.current) return;
+  async function persistModalAndClose(): Promise<boolean> {
+    if (!modal || isModalSavingRef.current) return true;
     const currentModal = modal;
     const content = currentModal.content.trim();
 
@@ -345,12 +316,12 @@ function App() {
       if (currentModal.mode === 'capture') {
         setModal(null);
         setSaveStatus('idle');
-        return;
+        return true;
       }
 
       setSaveStatus('failed');
       setError('Note content is required to save.');
-      return;
+      return false;
     }
 
     setSaveStatus('saving');
@@ -362,11 +333,16 @@ function App() {
     if (saved) {
       setSaveStatus('saved');
       setModal(null);
-      return;
+      return true;
     }
 
     setSaveStatus('failed');
+    return false;
   }
+
+  useEffect(() => {
+    desktopHideRequestRef.current = () => persistModalAndClose();
+  });
 
   async function submitModal(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -396,10 +372,7 @@ function App() {
 
   async function reorderNotes(nextNotes: Note[]) {
     try {
-      await api<{ ok: boolean }>('/notes/reorder', {
-        method: 'POST',
-        body: JSON.stringify({ noteIds: nextNotes.map((note) => note.id) })
-      });
+      await noteStore.reorderNotes(nextNotes.map((note) => note.id));
       await loadNotes();
     } catch (err) {
       setError((err as Error).message);
@@ -428,6 +401,76 @@ function App() {
   function discardModal() {
     setSaveStatus('idle');
     setModal(null);
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    configureWindowToggleShortcut(settings.globalShortcut, () => desktopHideRequestRef.current()).catch((err: Error) => {
+      if (active) setError(err.message);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [settings.globalShortcut]);
+
+  function openSettings() {
+    setSettingsDraft(settings);
+    setSettingsError('');
+    setIsRecordingShortcut(false);
+    setIsSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    setSettingsDraft(settings);
+    applySettings(settings);
+    setIsRecordingShortcut(false);
+    setIsSettingsOpen(false);
+  }
+
+  function updateSettingsDraft(patch: Partial<AppSettings>) {
+    setSettingsDraft((current) => {
+      const next = { ...current, ...patch };
+      applySettings(next);
+      return next;
+    });
+  }
+
+  async function persistSettings() {
+    setSettingsError('');
+    const previousSettings = settings;
+
+    try {
+      if (settingsDraft.globalShortcut !== previousSettings.globalShortcut) {
+        await testWindowToggleShortcut(settingsDraft.globalShortcut);
+      }
+
+      const saved = await saveSettings(settingsDraft);
+      setSettings(saved);
+      setSettingsDraft(saved);
+      applySettings(saved);
+      setIsSettingsOpen(false);
+    } catch (err) {
+      applySettings(previousSettings);
+      setSettingsDraft(previousSettings);
+      setSettingsError((err as Error).message || 'Could not save settings.');
+    }
+  }
+
+  function handleShortcutCapture(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const shortcut = shortcutFromKeyboardEvent(event.nativeEvent);
+    if (!shortcut) {
+      setSettingsError('Use a shortcut with at least one modifier key.');
+      return;
+    }
+
+    setSettingsError('');
+    updateSettingsDraft({ globalShortcut: shortcut });
+    setIsRecordingShortcut(false);
   }
 
   function registerNoteElement(noteId: number, element: HTMLElement | null) {
@@ -567,6 +610,9 @@ function App() {
             >
               {showArchived ? <ArchiveRestore size={18} /> : <Archive size={18} />}
               <span>{showArchived ? 'Archived' : 'Active'}</span>
+            </button>
+            <button className="settings-button" title="Settings" onClick={openSettings}>
+              <SettingsIcon size={18} />
             </button>
           </div>
         </header>
@@ -743,7 +789,144 @@ function App() {
           </section>
         </div>
       ) : null}
+
+      {isSettingsOpen ? (
+        <SettingsModal
+          draft={settingsDraft}
+          error={settingsError}
+          isDesktop={isDesktopRuntime()}
+          isRecordingShortcut={isRecordingShortcut}
+          onClose={closeSettings}
+          onFontScaleChange={(fontScale) => updateSettingsDraft({ fontScale })}
+          onRecordShortcut={() => {
+            setSettingsError('');
+            setIsRecordingShortcut(true);
+          }}
+          onSave={() => void persistSettings()}
+          onShortcutKeyDown={handleShortcutCapture}
+          onThemeChange={(themeMode) => updateSettingsDraft({ themeMode })}
+        />
+      ) : null}
     </main>
+  );
+}
+
+type SettingsModalProps = {
+  draft: AppSettings;
+  error: string;
+  isDesktop: boolean;
+  isRecordingShortcut: boolean;
+  onClose: () => void;
+  onFontScaleChange: (value: number) => void;
+  onRecordShortcut: () => void;
+  onSave: () => void;
+  onShortcutKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  onThemeChange: (value: AppSettings['themeMode']) => void;
+};
+
+function SettingsModal({
+  draft,
+  error,
+  isDesktop,
+  isRecordingShortcut,
+  onClose,
+  onFontScaleChange,
+  onRecordShortcut,
+  onSave,
+  onShortcutKeyDown,
+  onThemeChange
+}: SettingsModalProps) {
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="note-modal settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
+        <header className="modal-header">
+          <div>
+            <p className="eyebrow">Preferences</p>
+            <h2>Settings</h2>
+          </div>
+          <button title="Close settings" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="settings-form">
+          <label className="settings-row">
+            <span>
+              <strong>App shortcut</strong>
+              <small>{isDesktop ? 'Global show/hide shortcut' : 'Desktop app only'}</small>
+            </span>
+            <button
+              type="button"
+              className={`shortcut-recorder ${isRecordingShortcut ? 'is-recording' : ''}`}
+              onClick={onRecordShortcut}
+              onKeyDown={onShortcutKeyDown}
+            >
+              {isRecordingShortcut ? 'Press keys...' : displayShortcut(draft.globalShortcut)}
+            </button>
+          </label>
+
+          <label className="settings-row">
+            <span>
+              <strong>Font size</strong>
+              <small>{draft.fontScale}%</small>
+            </span>
+            <input
+              type="range"
+              min="85"
+              max="125"
+              step="5"
+              value={draft.fontScale}
+              onChange={(event) => onFontScaleChange(Number(event.target.value))}
+            />
+          </label>
+
+          <div className="settings-row">
+            <span>
+              <strong>Theme</strong>
+              <small>Choose a fixed app theme</small>
+            </span>
+            <div className="theme-toggle" role="group" aria-label="Theme">
+              <button
+                type="button"
+                className={draft.themeMode === 'light' ? 'is-selected' : ''}
+                onClick={() => onThemeChange('light')}
+              >
+                Light
+              </button>
+              <button
+                type="button"
+                className={draft.themeMode === 'dark' ? 'is-selected' : ''}
+                onClick={() => onThemeChange('dark')}
+              >
+                Dark
+              </button>
+            </div>
+          </div>
+
+          {error ? <div className="settings-error">{error}</div> : null}
+        </div>
+
+        <footer className="modal-actions settings-actions">
+          <div className="modal-left-actions">
+            <button type="button" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+          <span />
+          <div className="modal-right-actions">
+            <button type="button" onClick={onSave}>
+              Done
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
   );
 }
 
