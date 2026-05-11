@@ -185,38 +185,6 @@ You can also preview the built frontend with Vite:
 npm run preview
 ```
 
-## GitHub Release (Portable ZIP)
-
-- Push a version tag like `v0.1.0` to trigger the release workflow:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-- You can also run the workflow manually from GitHub Actions by providing an existing tag in the `tag` input (for reruns/re-publish).
-- The workflow runs `npm ci`, then `npm run check`, then `npm run desktop:portable`, and uploads `output/NoteDesk-portable-win-x64.zip` to the GitHub Release.
-
-### Troubleshooting
-
-If `npm run check` fails with `Cannot find module ...`, ensure dependencies are installed in the repository root:
-
-```bash
-rm -rf node_modules
-npm cache verify
-npm ci
-npm run check
-```
-
-On Windows PowerShell:
-
-```powershell
-Remove-Item -Recurse -Force node_modules
-npm cache verify
-npm ci
-npm run check
-```
-
 ## Scripts
 
 - `npm run dev` starts the API and Vite client together.
