@@ -18,6 +18,14 @@ fn is_main_window_visible(app: tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn is_main_window_focused(app: tauri::AppHandle) -> Result<bool, String> {
+  let window = app
+    .get_webview_window("main")
+    .ok_or_else(|| "Main window not found".to_string())?;
+  window.is_focused().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
   let window = app
     .get_webview_window("main")
@@ -39,9 +47,10 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
   let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
   let menu = Menu::with_items(app, &[&show_hide, &quit])?;
 
-  TrayIconBuilder::new()
+  let mut tray = TrayIconBuilder::new()
     .menu(&menu)
     .show_menu_on_left_click(true)
+    .tooltip("Note Desk")
     .on_menu_event(|app, event| match event.id.as_ref() {
       "show_hide" => {
         if let Some(window) = app.get_webview_window("main") {
@@ -58,8 +67,13 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
       }
       "quit" => app.exit(0),
       _ => {}
-    })
-    .build(app)?;
+    });
+
+  if let Some(icon) = app.default_window_icon().cloned() {
+    tray = tray.icon(icon);
+  }
+
+  tray.build(app)?;
 
   Ok(())
 }
@@ -79,6 +93,7 @@ fn main() {
     })
     .invoke_handler(tauri::generate_handler![
       is_main_window_visible,
+      is_main_window_focused,
       show_main_window,
       hide_main_window,
       notes::ensure_board,

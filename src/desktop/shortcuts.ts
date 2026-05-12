@@ -20,6 +20,12 @@ export async function configureWindowToggleShortcut(shortcut: string, onHideRequ
       return;
     }
 
+    const isFocused = await invoke<boolean>('is_main_window_focused');
+    if (!isFocused) {
+      await invoke('show_main_window');
+      return;
+    }
+
     const canHide = await activeHandler?.();
     if (canHide) await hideMainWindow();
   });
