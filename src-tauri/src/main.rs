@@ -18,6 +18,14 @@ fn is_main_window_visible(app: tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn is_main_window_focused(app: tauri::AppHandle) -> Result<bool, String> {
+  let window = app
+    .get_webview_window("main")
+    .ok_or_else(|| "Main window not found".to_string())?;
+  window.is_focused().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
   let window = app
     .get_webview_window("main")
@@ -79,6 +87,7 @@ fn main() {
     })
     .invoke_handler(tauri::generate_handler![
       is_main_window_visible,
+      is_main_window_focused,
       show_main_window,
       hide_main_window,
       notes::ensure_board,

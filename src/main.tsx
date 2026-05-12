@@ -22,6 +22,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   Archive,
   ArchiveRestore,
+  Check,
   Clipboard,
   GripVertical,
   Maximize2,
@@ -163,6 +164,7 @@ function App() {
   const [dragOriginNotes, setDragOriginNotes] = useState<Note[] | null>(null);
   const [noteDensity, setNoteDensity] = useState<'full' | 'compact'>('full');
   const [openNoteMenuId, setOpenNoteMenuId] = useState<number | null>(null);
+  const [copiedNoteId, setCopiedNoteId] = useState<number | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -362,9 +364,10 @@ function App() {
     }
   }
 
-  async function copyNote(content: string) {
+  async function copyNote(noteId: number, content: string) {
     try {
       await navigator.clipboard.writeText(content);
+      setCopiedNoteId(noteId);
     } catch {
       setError('Clipboard permission was denied.');
     }
@@ -660,8 +663,14 @@ function App() {
                           deleteNote={deleteNote}
                           density={noteDensity}
                           isMenuOpen={openNoteMenuId === note.id}
+                          isCopied={copiedNoteId === note.id}
                           note={note}
+                          onCopyReset={() => setCopiedNoteId((value) => (value === note.id ? null : value))}
                           onMenuToggle={() => setOpenNoteMenuId((value) => (value === note.id ? null : note.id))}
+                          onPinnedToggle={() => {
+                            setOpenNoteMenuId(null);
+                            void patchNote(note.id, { pinned: !note.pinned });
+                          }}
                           openNoteModal={openNoteModal}
                           patchNote={patchNote}
                           registerNoteElement={registerNoteElement}
@@ -692,8 +701,14 @@ function App() {
                         deleteNote={deleteNote}
                         density="pinned"
                         isMenuOpen={openNoteMenuId === note.id}
+                        isCopied={copiedNoteId === note.id}
                         note={note}
+                        onCopyReset={() => setCopiedNoteId((value) => (value === note.id ? null : value))}
                         onMenuToggle={() => setOpenNoteMenuId((value) => (value === note.id ? null : note.id))}
+                        onPinnedToggle={() => {
+                          setOpenNoteMenuId(null);
+                          void patchNote(note.id, { pinned: !note.pinned });
+                        }}
                         openNoteModal={openNoteModal}
                         patchNote={patchNote}
                         registerNoteElement={registerNoteElement}
@@ -932,13 +947,16 @@ function SettingsModal({
 
 type NoteCardProps = {
   canDragSort: boolean;
-  copyNote?: (content: string) => void;
+  copyNote?: (noteId: number, content: string) => void;
   deleteNote?: (noteId: number) => void;
   density: 'full' | 'compact' | 'pinned';
+  isCopied?: boolean;
   isMenuOpen?: boolean;
   isOverlay?: boolean;
   note: Note;
+  onCopyReset?: () => void;
   onMenuToggle?: () => void;
+  onPinnedToggle?: () => void;
   openNoteModal?: (note: Note) => void;
   patchNote?: (noteId: number, patch: NotePatch) => Promise<boolean>;
   registerNoteElement?: (noteId: number, element: HTMLElement | null) => void;
@@ -992,11 +1010,14 @@ function NoteCardShell({
   copyNote,
   deleteNote,
   density,
+  isCopied = false,
   isMenuOpen = false,
   isOverlay = false,
   isSorting = false,
   note,
+  onCopyReset,
   onMenuToggle,
+  onPinnedToggle,
   openNoteModal,
   patchNote,
   setActivatorNodeRef,
@@ -1026,8 +1047,8 @@ function NoteCardShell({
         </span>
         <h3 className={`note-title ${hasTitle ? '' : 'is-untitled'}`}>{title}</h3>
         {copyNote ? (
-          <button title="Copy" onClick={() => copyNote(note.content)}>
-            <Clipboard size={16} />
+          <button title={isCopied ? 'Copied' : 'Copy'} onClick={() => copyNote(note.id, note.content)} onMouseLeave={onCopyReset}>
+            {isCopied ? <Check size={16} /> : <Clipboard size={16} />}
           </button>
         ) : null}
         {onMenuToggle ? (
@@ -1037,7 +1058,7 @@ function NoteCardShell({
             </button>
             {isMenuOpen ? (
               <div className="note-menu" role="menu">
-                <button onClick={() => void patchNote?.(note.id, { pinned: !note.pinned })}>
+                <button onClick={onPinnedToggle}>
                   <Pin size={15} />
                   <span>{note.pinned ? 'Unpin' : 'Pin'}</span>
                 </button>
