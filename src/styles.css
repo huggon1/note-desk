@@ -388,7 +388,7 @@ button:disabled {
 
 .note-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -411,7 +411,8 @@ button:disabled {
   border-radius: var(--radius);
   background: rgba(255, 250, 235, 0.48);
   box-shadow: var(--shadow-sm);
-  padding: 12px;
+  overflow: hidden;
+  padding: 12px 12px 16px;
 }
 
 .pinned-sidebar-header {
@@ -1038,7 +1039,7 @@ button:disabled {
   }
 
   .note-grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .board-layout.has-pinned-sidebar {
