@@ -451,6 +451,7 @@ button:disabled {
   gap: 12px;
   overflow-y: auto;
   padding-right: 2px;
+  padding-bottom: 4px;
 }
 
 .pinned-sidebar:has(.has-open-menu) {
@@ -1038,10 +1039,6 @@ button:disabled {
     width: 100%;
   }
 
-  .note-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .board-layout.has-pinned-sidebar {
     grid-template-areas:
       "pinned"
@@ -1088,10 +1085,6 @@ button:disabled {
 
   .modal-actions button {
     flex: 1;
-  }
-
-  .note-grid {
-    grid-template-columns: 1fr;
   }
 
   .modal-backdrop {
